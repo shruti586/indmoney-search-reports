@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Global Search — Query Analysis · 2026-05-14</title>
+  <style>
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #21242f; --border: #2c2f3e;
+      --accent: #5b6af5; --green: #22c55e; --yellow: #f59e0b; --red: #ef4444;
+      --orange: #f97316; --text: #e2e5f0; --muted: #8b90a7; --pill-bg: #2c2f3e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; }
+    .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 240px; background: var(--surface); border-right: 1px solid var(--border); padding: 24px 16px; overflow-y: auto; z-index: 100; }
+    .sidebar .logo { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+    .sidebar .meta { font-size: 11px; color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+    .sidebar nav a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 12.5px; margin-bottom: 2px; transition: background 0.15s, color 0.15s; }
+    .sidebar nav a:hover { background: var(--surface2); color: var(--text); }
+    .sidebar nav .nav-group { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 16px 0 6px 10px; }
+    .main { margin-left: 240px; padding: 40px 48px; max-width: 1100px; }
+    .page-header { margin-bottom: 36px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+    .page-header h1 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 10px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { background: var(--pill-bg); color: var(--muted); border-radius: 20px; padding: 3px 12px; font-size: 11.5px; }
+    .chip.accent { background: #2d3278; color: #a0aaff; }
+    .chip.dummy { background: #3d2a10; color: #fb923c; }
+    section { margin-bottom: 52px; scroll-margin-top: 24px; }
+    section h2 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+    .section-num { background: var(--accent); color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+    section h3 { font-size: 14px; font-weight: 600; color: var(--text); margin: 24px 0 10px; padding-left: 10px; border-left: 3px solid var(--accent); }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .stat-card .value { font-size: 22px; font-weight: 700; color: #fff; }
+    .stat-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .stat-card.good { border-color: #22c55e44; background: #0f1f14; }
+    .stat-card.good .value { color: var(--green); }
+    .stat-card.warn { border-color: #f59e0b44; background: #1f1a10; }
+    .stat-card.warn .value { color: var(--yellow); }
+    .stat-card.bad { border-color: #ef444444; background: #200f0f; }
+    .stat-card.bad .value { color: var(--red); }
+    .table-wrap { overflow-x: auto; margin-bottom: 16px; border-radius: 10px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: var(--surface2); }
+    th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 9px 14px; border-bottom: 1px solid #1e2130; color: var(--text); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #1e2130; }
+    .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+    .badge { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+    .p0 { background: #3d1515; color: #f87171; }
+    .p1 { background: #3d2a10; color: #fb923c; }
+    .p2 { background: #3d3710; color: #fbbf24; }
+    .p3 { background: #1e2a1e; color: #86efac; }
+    .conf-high { color: var(--green); font-weight: 600; }
+    .conf-medium { color: var(--yellow); font-weight: 600; }
+    .callout { border-radius: 8px; padding: 14px 16px; margin: 12px 0; font-size: 13px; display: flex; gap: 10px; }
+    .callout.warn { background: #211c0e; border: 1px solid #f59e0b55; color: #fcd34d; }
+    .callout.info { background: #0e1521; border: 1px solid #5b6af555; color: #a0aaff; }
+    .callout.note { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); }
+    .callout.dummy { background: #211c0e; border: 1px solid #f97316aa; color: #fb923c; }
+    .ctr-bar { display: flex; align-items: center; gap: 8px; }
+    .bar-bg { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+    .bar-fill.good { background: var(--green); }
+    .bar-fill.warn { background: var(--yellow); }
+    .bar-fill.bad { background: var(--red); }
+    .delta-up { color: var(--green); font-size: 11px; }
+    .delta-down { color: var(--red); font-size: 11px; }
+    .action-block { border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-bottom: 14px; background: var(--surface); }
+    .action-block .action-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .action-block .action-title { font-size: 15px; font-weight: 600; color: #fff; }
+    .action-block .action-meta { font-size: 11.5px; color: var(--muted); }
+    .action-block p { color: var(--muted); font-size: 13px; margin-top: 6px; }
+    .action-block.p0-block { border-color: #f8717155; }
+    .action-block.p1-block { border-color: #fb923c55; }
+    .action-block.p2-block { border-color: #fbbf2455; }
+  </style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="logo">INDmoney</div>
+  <div class="meta">Global Search · Query Analysis<br/>2026-05-14 · <span style="color:#fb923c">⚠ DUMMY DATA</span></div>
+  <nav>
+    <a href="#summary" style="background:#2d3278; color:#a0aaff; font-weight:700;">★ Action Summary</a>
+    <div class="nav-group">Overview</div>
+    <a href="#s1">Distribution Summary</a>
+    <a href="#s2">Head Query CTR</a>
+    <a href="#s3">Cohort Breakdown</a>
+    <div class="nav-group">Deep Dives</div>
+    <a href="#s4-lt2">Entity Gaps (LT-2)</a>
+    <a href="#s4-lt4">FnO Strike Search (LT-4)</a>
+    <a href="#s4-lt5">Misspellings (LT-5)</a>
+    <a href="#s4-lt7">Emerging Trends (LT-7)</a>
+    <a href="#s4-lt8">Navigational (LT-8)</a>
+    <div class="nav-group">Analysis</div>
+    <a href="#s5">Index Strip</a>
+    <a href="#s6">Cohort Sizes</a>
+    <a href="#s7">Engineering Flags</a>
+    <a href="#s8">Filter × Vertical Mismatch</a>
+    <a href="#s9">Navigational Deep Dive</a>
+    <a href="#methodology">Methodology</a>
+  </nav>
+</aside>
+
+<main class="main">
+
+  <div class="page-header">
+    <h1>Global Search — Query Analysis</h1>
+    <div class="chips">
+      <span class="chip">2026-05-14 (IST full day)</span>
+      <span class="chip accent">Mixpanel 3052519</span>
+      <span class="chip dummy">⚠ DUMMY DATA — for pipeline testing only</span>
+    </div>
+  </div>
+
+  <div class="callout dummy">
+    <span>⚠</span>
+    <div><strong>This is a dummy report generated for pipeline testing.</strong> All numbers below are simulated. When the weekly routine runs with live Mixpanel data, this banner will not appear and all figures will reflect real query volumes and CTRs.</div>
+  </div>
+
+  <!-- Action Summary -->
+  <section id="summary">
+    <h2><span class="section-num">★</span> Action Summary</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Priority</th><th>Task</th><th>Trigger Queries</th><th>Searches/wk</th><th>Current State</th><th>Expected Impact</th><th>Owner</th><th>Effort</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Fix bonds ranking in SIF vertical</td>
+            <td class="mono">bond, bonds</td><td>2,391 <span class="delta-up">↑5%</span></td>
+            <td style="color:var(--red)">99% clicks bypass bonds product</td>
+            <td>~2,350 users/wk reach correct product</td>
+            <td>Search Infra</td><td>Low</td>
+          </tr>
+          <tr style="background:#1a1d27;">
+            <td colspan="8" style="padding:8px 14px; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);">Cross-Filter Mismatch</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1</span></td>
+            <td>Fix FnO tab ranking (F&O contract over equity card)</td>
+            <td class="mono">Stock names on FnO tab</td><td>21,340 clicks/day <span class="delta-up">↑6%</span></td>
+            <td style="color:var(--orange)">7.4% mismatch — 1,579 wrong clicks/day</td>
+            <td>~1,580 FnO traders/day reach correct contract</td>
+            <td>Search Infra</td><td>Medium</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1</span></td>
+            <td>Add money movement nav cards</td>
+            <td class="mono">wallet, add money, withdraw, withdrawal</td><td>1,823 <span class="delta-up">↑2%</span></td>
+            <td style="color:var(--red)">Near-zero resolution</td>
+            <td>~1,820 users/wk correctly routed</td>
+            <td>Product + Dev</td><td>Low</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1</span></td>
+            <td>Add "Manage your SIPs →" card</td>
+            <td class="mono">sip</td><td>1,902 <span class="delta-up">↑5%</span></td>
+            <td style="color:var(--orange)">43% land on equity cards</td>
+            <td>~820 SIP-management sessions served/wk</td>
+            <td>Product + Dev</td><td>Low</td>
+          </tr>
+          <tr style="background:#1a1d27;">
+            <td colspan="8" style="padding:8px 14px; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted);">Other Confirmed Gaps</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td>Fix BankNifty ranking</td>
+            <td class="mono">banknifty, bank nifty</td><td>418 <span class="delta-up">↑7%</span></td>
+            <td style="color:var(--red)">8.2% CTR — contract buried</td>
+            <td>~380 additional clicks/wk</td>
+            <td>Search Infra</td><td>Low</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td>Fix Microsoft partial mapping</td>
+            <td class="mono">microso, microsft</td><td>491 <span class="delta-up">↑5%</span></td>
+            <td style="color:var(--red)">24.8% CTR</td>
+            <td>~370 additional clicks/wk</td>
+            <td>Search Infra</td><td>Low</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td>Fix crude oil futures ranking</td>
+            <td class="mono">crude, crudeoilm</td><td>3,287 <span class="delta-up">↑4%</span></td>
+            <td style="color:var(--orange)">30.1% CTR</td>
+            <td>~2,200 additional clicks/wk</td>
+            <td>Search Infra</td><td>Low</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Section 1: Distribution Summary -->
+  <section id="s1">
+    <h2><span class="section-num">1</span> Distribution Summary</h2>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="label">Total Search Events</div>
+        <div class="value">812K</div>
+        <div class="sub">812,441 keystrokes <span class="delta-up">↑2.8%</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Unique Queries</div>
+        <div class="value">121K</div>
+        <div class="sub">121,204 distinct <span class="delta-up">↑2.7%</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Click Events</div>
+        <div class="value">429K</div>
+        <div class="sub">429,112 non-watchlist <span class="delta-up">↑2.9%</span></div>
+      </div>
+      <div class="stat-card good">
+        <div class="label">Overall Attributable CTR</div>
+        <div class="value">43.4%</div>
+        <div class="sub">350,291 ÷ 812,441 <span class="delta-up">↑0.4pp</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">0th State Clicks</div>
+        <div class="value">78,821</div>
+        <div class="sub">18.4% — blank-query</div>
+      </div>
+      <div class="stat-card good">
+        <div class="label">Zero-Result Searches</div>
+        <div class="value">2.0%</div>
+        <div class="sub">16,249 searches <span class="delta-up">↓0.1pp</span></div>
+      </div>
+      <div class="stat-card warn">
+        <div class="label">semantic_result = true</div>
+        <div class="value">98.1%</div>
+        <div class="sub">797,012 events ⚠ definition unconfirmed</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Clicks at Rank 1</div>
+        <div class="value">45.1%</div>
+        <div class="sub">193,589 clicks <span class="delta-up">↑0.2pp</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Clicks at Rank &gt;5</div>
+        <div class="value">10.6%</div>
+        <div class="sub">45,486 clicks</div>
+      </div>
+    </div>
+
+    <h3>Query Tier Breakdown</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tier</th><th>Query Rank</th><th>Search Events</th><th>% of Total</th><th>WoW Δ</th></tr></thead>
+        <tbody>
+          <tr><td>Head</td><td>Top 20</td><td>63,170</td><td>7.8%</td><td class="delta-up">↑2.4%</td></tr>
+          <tr><td>Torso</td><td>Rank 21–200</td><td>168,425</td><td>20.7%</td><td class="delta-up">↑2.3%</td></tr>
+          <tr><td>Tail</td><td>Rank 200+</td><td>580,846</td><td>71.5%</td><td class="delta-up">↑2.8%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Section 2: Head Query CTR -->
+  <section id="s2">
+    <h2><span class="section-num">2</span> Per-Query CTR — Top Head Queries</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Query</th><th>Search Events</th><th>Tier</th><th>WoW Δ</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">23</td><td>15,891</td><td>Head</td><td class="delta-up">↑4.3%</td><td>Strike price prefix — Nifty 23xxx contracts</td></tr>
+          <tr><td class="mono">in</td><td>10,214</td><td>Head</td><td class="delta-up">↑3.4%</td><td>Keystroke prefix — multi-intent</td></tr>
+          <tr><td class="mono">ni</td><td>7,541</td><td>Head</td><td class="delta-up">↑3.1%</td><td>Keystroke prefix → nifty, nippon, nvidia</td></tr>
+          <tr><td class="mono">tata</td><td>3,812</td><td>Head</td><td class="delta-up">↑5.6%</td><td>Brand prefix — Tata group</td></tr>
+          <tr><td class="mono">sbi</td><td>3,201</td><td>Head</td><td class="delta-up">↑5.2%</td><td>Complete ticker — SBI</td></tr>
+          <tr><td class="mono">ada</td><td>3,089</td><td>Head</td><td class="delta-up">↑3.8%</td><td>Prefix → adani</td></tr>
+          <tr><td class="mono">amd</td><td>2,614</td><td>Torso</td><td class="delta-up">↑4.6%</td><td>US Stocks — AMD complete ticker</td></tr>
+          <tr><td class="mono">meta</td><td>2,203</td><td>Torso</td><td class="delta-up">↑4.9%</td><td>US Stocks — Meta Platforms</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Section 3: Cohort Breakdown -->
+  <section id="s3">
+    <h2><span class="section-num">3</span> Cohort Breakdown (Filter-tab Proxy)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Filter Tab</th><th>Clicks</th><th>% of Tabbed</th><th>WoW Δ</th></tr></thead>
+        <tbody>
+          <tr><td>IN_STOCKS</td><td>207,427</td><td>52.6%</td><td class="delta-up">↑3.0%</td></tr>
+          <tr><td>US_STOCKS</td><td>143,552</td><td>36.4%</td><td class="delta-up">↑3.0%</td></tr>
+          <tr><td>IN_STOCKS_FNO</td><td>21,340</td><td>5.4%</td><td class="delta-up">↑5.8%</td></tr>
+          <tr><td>MF</td><td>18,072</td><td>4.6%</td><td class="delta-up">↑3.1%</td></tr>
+          <tr><td>SIF / other</td><td>4,621</td><td>1.2%</td><td class="delta-up">↑2.7%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Section 4: Long-Tail Clusters -->
+  <section>
+    <h2><span class="section-num">4</span> Long-Tail Cluster Mining</h2>
+
+    <section id="s4-lt2">
+      <h3>LT-2 — Entity Gaps</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Query/Cluster</th><th>Searches/wk</th><th>Clicks/wk</th><th>CTR</th><th>Root Cause</th><th>Action</th><th>Team</th><th>Confidence</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Zero-result pool</td><td>16,249</td><td>0</td><td>0%</td>
+              <td>Typos, unlisted brands, OTC stocks</td>
+              <td>Audit top 50 zero-result queries; prioritize catalog additions</td>
+              <td>Content + Search</td><td class="conf-high">High</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s4-lt4">
+      <h3>LT-4 — FnO Strike Search</h3>
+      <div class="callout warn"><span>🔴</span><div>FnO traders using search as strike picker — confirmed behavioral friction. Strike searches up 6.3% WoW.</div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Query/Cluster</th><th>Searches/wk</th><th>Clicks/wk</th><th>CTR</th><th>WoW Δ</th><th>Action</th><th>Team</th><th>Confidence</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="mono">23xxx Nifty strikes</td><td>~22,300</td><td>~15,800</td>
+              <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill warn" style="width:71%"></div></div>71%</div></td>
+              <td class="delta-up">↑6.3%</td>
+              <td>Strike shortcut + direct option chain row link</td><td>FnO UX + Search</td><td class="conf-high">Very High</td>
+            </tr>
+            <tr>
+              <td class="mono">crude / crudeoilm</td><td>3,287</td><td>990</td>
+              <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:30%"></div></div>30.1%</div></td>
+              <td class="delta-down">↓1.6pp</td>
+              <td>Ensure CrudeOilM futures rank #1; add commodity aliases</td><td>Search Infra</td><td class="conf-medium">Medium</td>
+            </tr>
+            <tr>
+              <td class="mono">banknifty</td><td>418</td><td>34</td>
+              <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:8%"></div></div><strong style="color:var(--red)">8.2% ⚠</strong></div></td>
+              <td class="delta-down">↑0.3pp</td>
+              <td>Audit BankNifty ranking across prefixes</td><td>Search Infra</td><td class="conf-high">High</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s4-lt5">
+      <h3>LT-5 — Misspellings</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Query</th><th>Searches/wk</th><th>Clicks/wk</th><th>CTR</th><th>WoW Δ</th><th>Action</th><th>Confidence</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="mono">microso / microsft</td><td>491</td><td>122</td>
+              <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:25%"></div></div><strong style="color:var(--red)">24.8%</strong></div></td>
+              <td class="delta-down">↓1.2pp</td>
+              <td>Map "microso", "microsft" → Microsoft</td><td class="conf-medium">Medium</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s4-lt7">
+      <h3>LT-7 — Emerging Trends</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Query</th><th>Searches/wk</th><th>Clicks/wk</th><th>CTR</th><th>WoW Δ</th><th>Action</th><th>Confidence</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="mono">invesco (MF)</td><td>3,391</td><td>1,288</td>
+              <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:38%"></div></div>38.0%</div></td>
+              <td class="delta-up">↑0.4pp</td>
+              <td>Audit Invesco India fund catalog completeness</td><td class="conf-medium">Medium</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="s4-lt8">
+      <h3>LT-8 — Navigational Queries</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Query/Cluster</th><th>Searches/wk</th><th>Clicks/wk</th><th>CTR</th><th>WoW Δ</th><th>Action</th><th>Team</th><th>Confidence</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="mono">wallet + add money + withdraw + withdrawal</td><td>1,823</td><td>812</td>
+              <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:45%"></div></div>~45% — all misdirected</div></td>
+              <td class="delta-up">↑2.4%</td>
+              <td>"Add Money →", "Withdraw Funds →" cards</td><td>Search + Product</td><td class="conf-high">High</td>
+            </tr>
+            <tr>
+              <td class="mono">sip (standalone)</td><td>1,902</td><td>1,501</td>
+              <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill warn" style="width:79%"></div></div>78.9% — 43% land on IN_STOCKS</div></td>
+              <td class="delta-up">↑4.7%</td>
+              <td>"Manage your SIPs →" card at top</td><td>Product</td><td class="conf-high">High</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <!-- Section 5: Index Strip -->
+  <section id="s5">
+    <h2><span class="section-num">5</span> Index Strip</h2>
+    <div class="stat-grid">
+      <div class="stat-card warn"><div class="label">Watchlist Tab</div><div class="value">~73%</div><div class="sub">Users opening search for watchlist</div></div>
+      <div class="stat-card"><div class="label">Active Search Strip</div><div class="value">~27%</div><div class="sub">Active tab switching</div></div>
+    </div>
+  </section>
+
+  <!-- Section 6: Cohort Sizes -->
+  <section id="s6">
+    <h2><span class="section-num">6</span> Cohort Sizes (30-day)</h2>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="label">FnO Traders</div><div class="value">33,241</div><div class="sub">≥1 fno_order_executed (30d) <span class="delta-up">↑3.9%</span></div></div>
+      <div class="stat-card"><div class="label">Intraday Traders</div><div class="value">23,614</div><div class="sub">≥1 intraday order (30d) <span class="delta-up">↑3.7%</span></div></div>
+      <div class="stat-card"><div class="label">Delivery Investors</div><div class="value">199,841</div><div class="sub">≥1 CNC/MTF/SIP order (30d) <span class="delta-up">↑2.9%</span></div></div>
+    </div>
+  </section>
+
+  <!-- Section 7: Engineering Flags -->
+  <section id="s7">
+    <h2><span class="section-num">7</span> Key Flags for Engineering / Product</h2>
+    <div class="action-block p0-block">
+      <div class="action-header"><span class="badge p0">FLAG 1</span><span class="action-title">semantic_result at 98.1% — definition still unverified</span></div>
+      <div class="action-meta">Owner: Engineering · Effort: Low · 2nd week unresolved</div>
+      <p>Still at 98.1% (down from 98.3%). Needs engineering confirmation: "semantic search executed" vs "semantic fallback used". Recommend a separate <code>semantic_fallback_used</code> boolean.</p>
+    </div>
+    <div class="action-block p0-block">
+      <div class="action-header"><span class="badge p0">FLAG 2</span><span class="action-title">FnO strike searches up 6.3% WoW — 22,300 searches/wk</span></div>
+      <div class="action-meta">Owner: FnO UX + Search · Urgency: HIGH</div>
+      <p>Strike price search via global search is accelerating. Option chain UI still not surfacing the right strike efficiently.</p>
+    </div>
+    <div class="action-block p1-block">
+      <div class="action-header"><span class="badge p1">FLAG 3</span><span class="action-title">banknifty — 8.2% CTR, 418 searches/wk</span></div>
+      <div class="action-meta">Owner: Search Infra · Verified via live CTR</div>
+      <p>BankNifty CTR slightly worse than last week (7.9% → 8.2% variance). Contract still buried. Audit: "bank", "bankni", "bank nifty", "banknifty".</p>
+    </div>
+    <div class="action-block p2-block">
+      <div class="action-header"><span class="badge p2">FLAG 4</span><span class="action-title">microso / microsft — 24.8% CTR, 491 searches/wk</span></div>
+      <div class="action-meta">Owner: Search Infra · Verified via live CTR</div>
+      <p>CTR worsened slightly vs last week (26% → 24.8%). Microsoft partial/typo mapping still not fixed.</p>
+    </div>
+  </section>
+
+  <!-- Section 8: Cross-Filter Mismatch -->
+  <section id="s8">
+    <h2><span class="section-num">8</span> Cross-Filter Mismatch Analysis</h2>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="label">Total Tabbed Clicks</div><div class="value">391K</div><div class="sub">391,012 <span class="delta-up">↑3.1%</span></div></div>
+      <div class="stat-card warn"><div class="label">Mismatched Clicks</div><div class="value">9,314</div><div class="sub">2.4% overall <span class="delta-up">↑231</span></div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Filter Tab</th><th>Total Clicks</th><th>Mismatched</th><th>Mismatch %</th><th>WoW Δ</th></tr></thead>
+        <tbody>
+          <tr><td>IN_STOCKS</td><td>207,427</td><td>5,601</td><td>2.7%</td><td>—</td></tr>
+          <tr><td>US_STOCKS</td><td>143,552</td><td>798</td><td>0.6%</td><td>—</td></tr>
+          <tr><td>IN_STOCKS_FNO</td><td>21,340</td><td>1,579</td><td style="color:var(--orange); font-weight:700;">7.4% ⚠</td><td class="delta-down">↓0.4pp ✓</td></tr>
+          <tr><td>MF</td><td>18,072</td><td>887</td><td>4.9%</td><td>—</td></tr>
+          <tr><td>SIF</td><td>621</td><td>449</td><td style="color:var(--red); font-weight:700;">56.7% ⚠</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Section 9: Navigational Queries -->
+  <section id="s9">
+    <h2><span class="section-num">9</span> Navigational Queries Deep Dive</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Query</th><th>Searches/wk</th><th>Clicks/wk</th><th>CTR</th><th>WoW Δ</th><th>Where clicks land</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono">sip</td><td>1,902</td><td>1,501</td>
+            <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill good" style="width:79%"></div></div>79%</div></td>
+            <td class="delta-up">↑5%</td>
+            <td>54% → MF ✓, <strong style="color:var(--orange)">43% → IN_STOCKS ⚠</strong></td>
+          </tr>
+          <tr>
+            <td class="mono">bond</td><td>1,341</td><td>1,109</td>
+            <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill warn" style="width:83%"></div></div>83%</div></td>
+            <td class="delta-up">↑5%</td>
+            <td>44% → equities, 30% → MF, <strong style="color:var(--red)">1% → SIF ⚠</strong></td>
+          </tr>
+          <tr>
+            <td class="mono">wallet</td><td>1,102</td><td>541</td>
+            <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill warn" style="width:49%"></div></div>49%</div></td>
+            <td class="delta-up">↑4.5%</td>
+            <td><strong style="color:var(--red)">91% → IN_STOCKS ⚠</strong></td>
+          </tr>
+          <tr>
+            <td class="mono">fd</td><td>902</td><td>551</td>
+            <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill good" style="width:61%"></div></div>61% ✓</div></td>
+            <td class="delta-up">↑4.9%</td>
+            <td>87% → FD vertical ✓</td>
+          </tr>
+          <tr>
+            <td class="mono">loan</td><td>749</td><td>264</td>
+            <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:35%"></div></div>35%</div></td>
+            <td class="delta-up">↑5.2%</td>
+            <td><strong style="color:var(--orange)">54% → MF, 24% → INSTA_CASH ⚠</strong></td>
+          </tr>
+          <tr>
+            <td class="mono">withdraw</td><td>347</td><td>159</td>
+            <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:46%"></div></div>46%</div></td>
+            <td class="delta-up">↑4.8%</td><td>No matching result</td>
+          </tr>
+          <tr>
+            <td class="mono">add money</td><td>74</td><td>0</td>
+            <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:0%"></div></div>0%</div></td>
+            <td>—</td><td>Zero results</td>
+          </tr>
+          <tr>
+            <td class="mono">kyc</td><td>81</td><td>25</td>
+            <td><div class="ctr-bar"><div class="bar-bg"><div class="bar-fill bad" style="width:31%"></div></div>31%</div></td>
+            <td class="delta-up">↑5.2%</td><td>No KYC deep-link</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Navigational Cards Backlog</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Card Label</th><th>Trigger Queries</th><th>Searches/wk</th><th>WoW Δ</th><th>Priority</th></tr></thead>
+        <tbody>
+          <tr><td><strong>"Explore Bonds →"</strong></td><td class="mono">bond, bonds</td><td>2,391</td><td class="delta-up">↑5%</td><td><span class="badge p0">P0</span> + ranking fix</td></tr>
+          <tr><td><strong>"Add Money →"</strong></td><td class="mono">wallet, add money</td><td>1,176</td><td class="delta-up">↑4.5%</td><td><span class="badge p1">P1</span></td></tr>
+          <tr><td><strong>"Manage your SIPs →"</strong></td><td class="mono">sip</td><td>1,902</td><td class="delta-up">↑5%</td><td><span class="badge p1">P1</span></td></tr>
+          <tr><td><strong>"Withdraw Funds →"</strong></td><td class="mono">withdraw, withdrawal</td><td>688</td><td class="delta-up">↑5%</td><td><span class="badge p1">P1</span></td></tr>
+          <tr><td><strong>"Loan Against MF →"</strong></td><td class="mono">loan</td><td>749</td><td class="delta-up">↑5.2%</td><td><span class="badge p2">P2</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Methodology -->
+  <section id="methodology">
+    <h2><span class="section-num">M</span> Methodology & Queries</h2>
+    <div class="callout dummy"><span>⚠</span><div>This is a <strong>dummy report</strong>. Numbers above are simulated for pipeline testing. The methodology below reflects the real query plan the weekly routine will execute against live Mixpanel data.</div></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Query</th><th>Event</th><th>Breakdown / Filter</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>Q1</td><td class="mono">global_search_keyword_searched_backend_event</td><td>Total count</td><td>Overall search volume</td></tr>
+          <tr><td>Q2</td><td class="mono">gs_all (event_sub_type ≠ watchlist)</td><td>Total count</td><td>Attributable click volume</td></tr>
+          <tr><td>Q3</td><td class="mono">global_search_keyword_searched_backend_event</td><td>result (boolean)</td><td>Zero-result rate</td></tr>
+          <tr><td>Q4</td><td class="mono">gs_all (non-watchlist)</td><td>over_all_rank</td><td>Rank distribution</td></tr>
+          <tr><td>Q5</td><td class="mono">gs_all (non-watchlist)</td><td>filter tab</td><td>Click volume by tab</td></tr>
+          <tr><td>Q6–Q9</td><td class="mono">gs_all per tab</td><td>query × filter tab</td><td>Top queries per cohort</td></tr>
+          <tr><td>Q10</td><td class="mono">gs_all (non-watchlist)</td><td>filter × vertical</td><td>Cross-filter mismatch matrix</td></tr>
+          <tr><td>Q11</td><td class="mono">keyword_searched per navigational term</td><td>keyword = value (17 terms)</td><td>Navigational query search volume</td></tr>
+          <tr><td>Q12</td><td class="mono">gs_all per navigational term</td><td>query = value × vertical</td><td>Navigational click destination</td></tr>
+          <tr><td>Q13</td><td class="mono">keyword_searched + gs_all per LT term</td><td>keyword/query = value (6 terms)</td><td>LT cluster CTR verification</td></tr>
+          <tr><td>Q14</td><td class="mono">fno + indstocks order events</td><td>unique users, 30d</td><td>Cohort sizes</td></tr>
+          <tr><td>Q15</td><td class="mono">gs_index_strip_clicked</td><td>tab_name</td><td>Index strip usage</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.sidebar nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.sidebar nav a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
